@@ -1,0 +1,92 @@
+#######################################
+# Syntax coloring map for JMCMotorControl
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+JMCBus	KEYWORD1
+JMCMotor	KEYWORD1
+JMCController	KEYWORD1
+JMCResult	KEYWORD1
+MotorStatus	KEYWORD1
+ErrorFlags	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+beginControllino	KEYWORD2
+setResponseTimeout	KEYWORD2
+setRetries	KEYWORD2
+setInterFrameGap	KEYWORD2
+writeSingle	KEYWORD2
+writeMultiple	KEYWORD2
+readHolding	KEYWORD2
+lastException	KEYWORD2
+resultName	KEYWORD2
+crc16	KEYWORD2
+
+isPresent	KEYWORD2
+setAccelDecel	KEYWORD2
+setOperationMode	KEYWORD2
+loosenBrake	KEYWORD2
+enable	KEYWORD2
+alarmReset	KEYWORD2
+moveToPosition	KEYWORD2
+preparePositionMove	KEYWORD2
+enableMovement	KEYWORD2
+startMovement	KEYWORD2
+getPosition	KEYWORD2
+setVelocity	KEYWORD2
+setTargetVelocity	KEYWORD2
+prepareVelocityMode	KEYWORD2
+getVelocity	KEYWORD2
+setHomingVelocity	KEYWORD2
+setHomingAccel	KEYWORD2
+setHomingOffset	KEYWORD2
+performHoming	KEYWORD2
+setZeroPosition	KEYWORD2
+setCurrentPosition	KEYWORD2
+quickStop	KEYWORD2
+eStop	KEYWORD2
+getStatusWord	KEYWORD2
+getDetailedStatus	KEYWORD2
+getErrorFlags	KEYWORD2
+isRunning	KEYWORD2
+isTargetReached	KEYWORD2
+hasFault	KEYWORD2
+broadcastPrepareMove	KEYWORD2
+broadcastSetVelocity	KEYWORD2
+broadcastEnableMovement	KEYWORD2
+broadcastStartMovement	KEYWORD2
+broadcastStop	KEYWORD2
+slaveId	KEYWORD2
+lastResult	KEYWORD2
+
+setNetwork	KEYWORD2
+setMotorCount	KEYWORD2
+setMotionDefaults	KEYWORD2
+run	KEYWORD2
+motor	KEYWORD2
+busRef	KEYWORD2
+motorCount	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+JMC_OK	LITERAL1
+JMC_ERR_TIMEOUT	LITERAL1
+JMC_ERR_CRC	LITERAL1
+JMC_ERR_EXCEPTION	LITERAL1
+JMC_ERR_BADFRAME	LITERAL1
+JMC_ERR_PARAM	LITERAL1
+MODE_POSITION	LITERAL1
+MODE_VELOCITY	LITERAL1
+MODE_HOMING	LITERAL1
+QUICK_STOP_DECEL	LITERAL1
+QUICK_STOP_FAST	LITERAL1
+QUICK_STOP_IMMEDIATE	LITERAL1
+JMC_MAX_MOTORS	LITERAL1
