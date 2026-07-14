@@ -150,6 +150,14 @@ powered up after the controller) is automatically re-initialised.
 must turn exactly 60 revolutions in 60 s. 10× off → P45 mismatch (fix P45 or
 call `setDriveP45`).
 
+**⚠ Speed resolution and P45:** with `P45=0` the drive resolves **whole rps
+only** (1 count = 1 rps) — a requested 0.3 rps has no representation. The
+library clamps nonzero speeds up to the 1 rps minimum so a move never silently
+gets velocity 0 ("OK" reply but no motion), but the motor will run at 1 rps,
+not 0.3. **If you need speeds below 1 rps (60 RPM), set `P45=1` on the drive
+panel and call `jmc.setDriveP45(1)`** — then the unit is 0.1 rps and `V:0.3`
+is exact.
+
 ## Units
 
 | Quantity | Unit |

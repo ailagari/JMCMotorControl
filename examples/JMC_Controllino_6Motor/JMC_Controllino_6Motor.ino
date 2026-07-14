@@ -53,8 +53,10 @@ void setup() {
   jmc.setMotionDefaults(0.5, 0.5, 0.3, 0.3);
 
   // Speed unit: the library default matches the drive factory default
-  // (P45 = 0, register unit = 1 rps). ONLY if your drives are configured
-  // with P45 = 1 (unit 0.1 rps), uncomment:
+  // (P45 = 0, register unit = 1 rps). NOTE: with P45 = 0 the drive resolves
+  // WHOLE rps only - speeds below 1 rps are clamped up to 1 rps. If you need
+  // fine speeds like 0.3 rps (18 RPM), set P45 = 1 on the drive panel and
+  // uncomment:
   // jmc.setDriveP45(1);
   // Verify on first bring-up: V:1 then VS -> exactly 60 shaft revs in 60 s.
 

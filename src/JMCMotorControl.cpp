@@ -221,7 +221,16 @@ JMCResult JMCMotor::ctrl(uint16_t value) {
 
 // rps -> speed register counts. Scale follows drive P45 (see setSpeedScale):
 // P45=0 (factory default) -> 1 count per rps; P45=1 -> 10 counts per rps.
-int32_t JMCMotor::spdReg(float rps) const { return (int32_t)lroundf(rps * _speedScale); }
+int32_t JMCMotor::spdReg(float rps) const {
+  int32_t v = (int32_t)lroundf(rps * _speedScale);
+  // Guard against a silent no-move: a nonzero requested speed must never
+  // round down to 0 counts. With P45=0 the drive only resolves whole rps,
+  // so e.g. 0.3 rps would become 0 (target velocity 0 = motor never moves).
+  // For real sub-1-rps speeds set P45=1 on the drive + setDriveP45(1).
+  if (v == 0 && rps >  0.001f) v =  1;
+  if (v == 0 && rps < -0.001f) v = -1;
+  return v;
+}
 
 uint16_t JMCMotor::toAccelReg(float rps_s) {
   long v = lroundf(rps_s * 10.0f);
