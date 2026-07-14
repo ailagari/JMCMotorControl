@@ -58,6 +58,13 @@ void setup() {
   // jmc.setDriveP45(1);
   // Verify on first bring-up: V:1 then VS -> exactly 60 shaft revs in 60 s.
 
+  // Per-motor HARDCODED settings (optional, motor IDs 1-based). Runtime
+  // commands (V / HV / HO / MC) are lost after a power failure - values set
+  // here are re-applied on every boot and whenever a drive comes back online.
+  // jmc.setMotorVelocity(1, 0.5);        // M1 run speed 0.5 rps
+  // jmc.setMotorHomingVelocity(1, 0.2);  // M1 homing speed 0.2 rps
+  // jmc.setMotorHomingOffset(1, 1000);   // M1: 1000 steps past origin sensor
+
   uint8_t found = jmc.begin();                // bus + Ethernet + motors + "READY:n/6"
   Serial.print(found);
   Serial.println(F(" motor(s) detected"));

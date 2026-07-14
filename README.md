@@ -42,6 +42,22 @@ void loop() { jmc.run(); }                    // non-blocking
 
 Flash it, then send UDP text commands from any PC/PLC/app.
 
+### Hardcoded vs runtime settings
+
+Runtime commands (`V`, `HV`, `HO`, `MC`) are lost after a power failure — the
+controller reboots with the sketch's values. For settings that must survive,
+hardcode them per motor in the sketch (motor IDs are 1-based); they are
+re-applied on every boot **and** whenever a drive comes back online:
+
+```cpp
+jmc.setMotorVelocity(1, 0.5);        // M1 run speed 0.5 rps
+jmc.setMotorHomingVelocity(1, 0.2);  // M1 homing speed 0.2 rps
+jmc.setMotorHomingOffset(1, 1000);   // M1 stops 1000 steps past the origin sensor
+```
+
+Typical pattern: tune values live with `V`/`HV`/`HO` during commissioning,
+then copy the final numbers into the sketch as `setMotor...()` calls.
+
 ## Command reference (JMC_CONTROLLINO_V3)
 
 | Command | Action | Reply |

@@ -526,7 +526,8 @@ JMCController::JMCController(HardwareSerial& rs485Serial) : _bus(rs485Serial) {
   _pcIp    = IPAddress(192, 168, 1, 100);
   for (uint8_t i = 0; i < JMC_MAX_MOTORS; i++) {
     _m[i] = nullptr;
-    _storedVel[i]    = _defVel;
+    _storedVel[i]    = NAN;   // NAN = "not hardcoded" -> default applied at init
+    _homingVel[i]    = NAN;
     _homingOffset[i] = 0;
     _offlineTry[i]   = 0;
     _cache[i] = { false, 0, 0, false, false, false, false };
@@ -563,6 +564,29 @@ void JMCController::setDriveP45(uint8_t p45) {
     if (_m[i]) _m[i]->setSpeedScale(_speedScale);
 }
 
+// ---- Per-motor hardcoded settings (motor IDs are 1-based) -------------------
+void JMCController::setMotorVelocity(uint8_t motorId, float rps) {
+  if (motorId < 1 || motorId > JMC_MAX_MOTORS) return;
+  _storedVel[motorId - 1] = rps;
+}
+
+void JMCController::setMotorHomingVelocity(uint8_t motorId, float rps) {
+  if (motorId < 1 || motorId > JMC_MAX_MOTORS) return;
+  uint8_t i = motorId - 1;
+  _homingVel[i] = rps;
+  if (_m[i] && _cache[i].online) {
+    _m[i]->setHomingVelocity(rps);
+    _m[i]->setHomingZeroVelocity(rps);
+  }
+}
+
+void JMCController::setMotorHomingOffset(uint8_t motorId, long steps) {
+  if (motorId < 1 || motorId > JMC_MAX_MOTORS) return;
+  uint8_t i = motorId - 1;
+  _homingOffset[i] = steps;
+  if (_m[i] && _cache[i].online) _m[i]->setHomingOffset(steps);
+}
+
 uint8_t JMCController::begin(uint32_t baud) {
   _bus.beginControllino(baud);
   // Short per-attempt timeouts so a dead drive can't stall the loop long.
@@ -590,12 +614,11 @@ uint8_t JMCController::begin(uint32_t baud) {
 // Allocate (if needed), fast-probe and initialise one motor slot.
 // The fast presence probe keeps boot quick even with many empty slots.
 bool JMCController::initMotorSlot(uint8_t i) {
-  if (!_m[i]) {
-    _m[i] = new JMCMotor(_bus, i + 1);   // slave IDs 1..count
-    _storedVel[i]    = _defVel;
-    _homingOffset[i] = 0;
-  }
-  _m[i]->setSpeedScale(_speedScale);     // match drive P45 unit
+  if (!_m[i]) _m[i] = new JMCMotor(_bus, i + 1);   // slave IDs 1..count
+  // Resolve "not hardcoded" sentinels to the global defaults.
+  if (isnan(_storedVel[i])) _storedVel[i] = _defVel;
+  if (isnan(_homingVel[i])) _homingVel[i] = _defHomingVel;
+  _m[i]->setSpeedScale(_speedScale);               // match drive P45 unit
 
   _bus.setResponseTimeout(PROBE_TIMEOUT_MS);
   _bus.setRetries(0);
@@ -606,8 +629,8 @@ bool JMCController::initMotorSlot(uint8_t i) {
   JMCResult r = JMC_ERR_TIMEOUT;
   if (present) {
     r = _m[i]->begin(_defAccel, _defDecel);
-    _m[i]->setHomingVelocity(_defHomingVel);
-    _m[i]->setHomingZeroVelocity(_defHomingVel);
+    _m[i]->setHomingVelocity(_homingVel[i]);       // hardcoded or default
+    _m[i]->setHomingZeroVelocity(_homingVel[i]);
     _m[i]->setHomingOffset(_homingOffset[i]);
   }
   _cache[i].online  = (r == JMC_OK);
@@ -783,8 +806,8 @@ void JMCController::serviceMonitor() {
     // Drive (re)appeared - it may have been power-cycled, so re-initialise it
     // fully (enable sequence, accel/decel, homing speeds, stored HO offset).
     _m[chosen]->begin(_defAccel, _defDecel);
-    _m[chosen]->setHomingVelocity(_defHomingVel);
-    _m[chosen]->setHomingZeroVelocity(_defHomingVel);
+    _m[chosen]->setHomingVelocity(_homingVel[chosen]);
+    _m[chosen]->setHomingZeroVelocity(_homingVel[chosen]);
     _m[chosen]->setHomingOffset(_homingOffset[chosen]);
     s = _m[chosen]->getStatusWord();
     pushEvent("EVENT:ONLINE:" + mn + " ST=0x" + String(s, HEX) + " (re-initialised)");
@@ -1391,6 +1414,7 @@ void JMCController::handleHomingVelocity(const String& args) {
   String s = args;
   if (s.indexOf(',') < 0) {
     float v = s.toFloat();
+    _homingVel[0] = v;                  // remembered for drive re-init
     _m[0]->setHomingVelocity(v);        // 0x6099 search speed
     _m[0]->setHomingZeroVelocity(v);    // 0x609B zero-find speed
     reply("Set Motor 1 HV: " + String(v));
@@ -1404,6 +1428,7 @@ void JMCController::handleHomingVelocity(const String& args) {
     String part = work.substring(start, comma); part.trim();
     if (part.length()) {
       float v = part.toFloat();
+      _homingVel[i] = v;
       _m[i]->setHomingVelocity(v);
       _m[i]->setHomingZeroVelocity(v);
       out += part;

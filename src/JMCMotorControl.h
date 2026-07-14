@@ -284,6 +284,15 @@ class JMCController {
     // P45=1 (register unit 0.1 rps).
     void setDriveP45(uint8_t p45);
 
+    // ---- Per-motor hardcoded settings (optional; motor IDs are 1-based) ----
+    // Runtime commands (V / HV / HO) are lost on a power failure. These let
+    // the sketch hardcode per-motor values instead: they are re-applied on
+    // every boot and whenever a drive comes back online. Call before or
+    // after begin(); runtime commands can still override until next reboot.
+    void setMotorVelocity(uint8_t motorId, float rps);        // run speed
+    void setMotorHomingVelocity(uint8_t motorId, float rps);  // homing speed
+    void setMotorHomingOffset(uint8_t motorId, long steps);   // past sensor
+
     // ---- Lifecycle ----------------------------------------------------------
     // Brings up RS-485 (Controllino mode), Ethernet/UDP and all motors.
     // Sends "READY:n/count" to the PC. Returns the number of motors found.
@@ -331,6 +340,7 @@ class JMCController {
     float _defAccel = 0.5f, _defDecel = 0.5f;
     float _defVel   = 0.3f, _defHomingVel = 0.3f;
     float _speedScale = 1.0f;              // counts per rps (drive P45 = 0 default)
+    float _homingVel[JMC_MAX_MOTORS];      // per-motor homing speed (NAN = default)
     long  _homingOffset[JMC_MAX_MOTORS];   // steps after sensor trigger (HO cmd)
 
     uint32_t _lastTick = 0;

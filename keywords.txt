@@ -68,6 +68,13 @@ lastResult	KEYWORD2
 setNetwork	KEYWORD2
 setMotorCount	KEYWORD2
 setMotionDefaults	KEYWORD2
+setDriveP45	KEYWORD2
+setSpeedScale	KEYWORD2
+speedScale	KEYWORD2
+setHomingZeroVelocity	KEYWORD2
+setMotorVelocity	KEYWORD2
+setMotorHomingVelocity	KEYWORD2
+setMotorHomingOffset	KEYWORD2
 run	KEYWORD2
 motor	KEYWORD2
 busRef	KEYWORD2
