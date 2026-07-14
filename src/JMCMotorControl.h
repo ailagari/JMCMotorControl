@@ -265,7 +265,8 @@ class JMCMotor {
 
 class JMCController {
   public:
-    static const uint8_t JMC_MAX_MOTORS = 8;
+    // RS-485 allows up to 32 Modbus slaves per bus (IHSS60-R/RC datasheet).
+    static const uint8_t JMC_MAX_MOTORS = 32;
 
     explicit JMCController(HardwareSerial& rs485Serial = Serial3);
 
@@ -273,7 +274,7 @@ class JMCController {
     void setNetwork(const byte* mac,
                     IPAddress localIp, uint16_t localPort,
                     IPAddress pcIp,    uint16_t pcPort);
-    void setMotorCount(uint8_t count);                 // 1..JMC_MAX_MOTORS
+    void setMotorCount(uint8_t count);                 // 1..32 (slave IDs 1..count)
     void setMotionDefaults(float accel_rps_s, float decel_rps_s,
                            float velocity_rps, float homingVel_rps);
 
@@ -303,7 +304,7 @@ class JMCController {
     static const uint32_t MONITOR_TICK_MS  = 8;
     static const uint32_t OFFLINE_RETRY_MS = 3000;
     static const uint16_t PROBE_TIMEOUT_MS = 12;
-    static const int      CMD_BUFFER_SIZE  = 255;
+    static const int      CMD_BUFFER_SIZE  = 512;   // fits P: with 32 positions
 
     struct MotorCache {
       bool     online;

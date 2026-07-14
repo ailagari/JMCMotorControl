@@ -2,9 +2,10 @@
 
 **Complete UDP command system for JMC integrated servo/stepper drives on Controllino.**
 
-Control up to 8 JMC drives (IHSS / IHT "-RC" series) over Modbus-RTU / RS-485
-with a battle-tested UDP command protocol, automatic limit-switch and fault
-event push, and a hardened comms layer — in a ~15-line sketch.
+Control up to **32 JMC drives** (IHSS / IHT "-RC" series — the RS-485 bus
+maximum) over Modbus-RTU with a battle-tested UDP command protocol, automatic
+limit-switch and fault event push, and a hardened comms layer — in a ~15-line
+sketch.
 
 Verified against the **JMC Modbus-RTU manual V2.2** and the **IHSS60-R/RC
 datasheet**. *Independent project — not affiliated with JMC (Shenzhen Just
@@ -86,7 +87,22 @@ EVENT:ONLINE:M4 / EVENT:OFFLINE:M4        drive appeared / stopped answering
 ```
 
 Dead drives are re-probed every 3 s with a fast 12 ms no-retry read so they
-never delay limit detection on live motors.
+never delay limit detection on live motors. A drive that appears later (e.g.
+powered up after the controller) is automatically re-initialised.
+
+## Scaling to 32 motors
+
+- `jmc.setMotorCount(n)` accepts 1–32 (slave IDs 1..n).
+- **Synchronised launch is broadcast-based**: when a `P:` command addresses
+  every motor (and always for `VS`), the arm+start are sent as two single
+  broadcast frames (slave 0) — all drives start in the same instant, with no
+  per-motor stagger even at 32 motors. Partial selections launch per motor
+  (~5 ms apart each).
+- Monitor sweep time scales with the configured count (≈ count × 13 ms), so
+  **set `setMotorCount` to the number of drives actually installed**: 6 motors
+  → limit events in <100 ms; 32 motors → <450 ms.
+- Boot stays fast with missing drives: every slot gets a 12 ms presence probe
+  first; only responding drives get the full initialisation.
 
 ## Drive setup (once per drive)
 

@@ -577,9 +577,21 @@ uint8_t JMCController::begin(uint32_t baud) {
     if (!_m[i]) _m[i] = new JMCMotor(_bus, i + 1);   // slave IDs 1..count
     _m[i]->setSpeedScale(_speedScale);               // match drive P45 unit
     _storedVel[i] = _defVel;
-    JMCResult r = _m[i]->begin(_defAccel, _defDecel);
-    _m[i]->setHomingVelocity(_defHomingVel);
-    _m[i]->setHomingZeroVelocity(_defHomingVel);
+
+    // Fast presence probe first, so a bus configured for 32 motors with only
+    // a few connected still boots in well under a second.
+    _bus.setResponseTimeout(PROBE_TIMEOUT_MS);
+    _bus.setRetries(0);
+    bool present = _m[i]->isPresent();
+    _bus.setResponseTimeout(30);
+    _bus.setRetries(1);
+
+    JMCResult r = JMC_ERR_TIMEOUT;
+    if (present) {
+      r = _m[i]->begin(_defAccel, _defDecel);
+      _m[i]->setHomingVelocity(_defHomingVel);
+      _m[i]->setHomingZeroVelocity(_defHomingVel);
+    }
     _cache[i].online = (r == JMC_OK);
     if (r == JMC_OK) {
       found++;
@@ -757,7 +769,14 @@ void JMCController::serviceMonitor() {
   c.failCnt = 0;
   if (!c.online) {
     c.online = true;
-    pushEvent("EVENT:ONLINE:" + mn + " ST=0x" + String(s, HEX));
+    // Drive (re)appeared - it may have been power-cycled, so re-initialise it
+    // fully (enable sequence, accel/decel, homing speeds, stored HO offset).
+    _m[chosen]->begin(_defAccel, _defDecel);
+    _m[chosen]->setHomingVelocity(_defHomingVel);
+    _m[chosen]->setHomingZeroVelocity(_defHomingVel);
+    _m[chosen]->setHomingOffset(_homingOffset[chosen]);
+    s = _m[chosen]->getStatusWord();
+    pushEvent("EVENT:ONLINE:" + mn + " ST=0x" + String(s, HEX) + " (re-initialised)");
   }
 
   bool cw    = s & 0x4000;
@@ -823,14 +842,25 @@ void JMCController::handlePosition(const String& args) {
   }
   if (n == 0) { reply("ERR:no positions"); return; }
 
-  // Synchronised start: prepare all, then arm all, then launch all.
+  // Synchronised start: prepare all (targets differ per motor), then launch.
   for (uint8_t i = 0; i < _count; i++)
     if (active[i]) _m[i]->preparePositionMove(target[i], _storedVel[i], true);
-  for (uint8_t i = 0; i < _count; i++)
-    if (active[i]) _m[i]->enableMovement();
-  delayMicroseconds(200);
-  for (uint8_t i = 0; i < _count; i++)
-    if (active[i]) _m[i]->startMovement();
+
+  if (n == (int)_count) {
+    // Every motor is moving: launch with TWO broadcast frames (slave 0) so
+    // all drives start in the same instant - no per-motor stagger even at 32.
+    _m[0]->broadcastEnableMovement();
+    delayMicroseconds(300);
+    _m[0]->broadcastStartMovement();
+  } else {
+    // Partial selection: per-motor launch (broadcast would also retrigger
+    // the motors that were NOT commanded).
+    for (uint8_t i = 0; i < _count; i++)
+      if (active[i]) _m[i]->enableMovement();
+    delayMicroseconds(200);
+    for (uint8_t i = 0; i < _count; i++)
+      if (active[i]) _m[i]->startMovement();
+  }
 
   reply("OK");
 }
@@ -1307,10 +1337,11 @@ void JMCController::handleVelocityAll(const String& args) {
 }
 
 void JMCController::handleVelocityStart() {
+  // Per-motor speeds, then a broadcast launch so all motors start together.
   for (uint8_t i = 0; i < _count; i++) _m[i]->prepareVelocityMode(_storedVel[i]);
-  for (uint8_t i = 0; i < _count; i++) _m[i]->enableMovement();
-  delayMicroseconds(200);
-  for (uint8_t i = 0; i < _count; i++) _m[i]->startMovement();
+  _m[0]->broadcastEnableMovement();
+  delayMicroseconds(300);
+  _m[0]->broadcastStartMovement();
   reply("VS: velocity mode started (stop with B)");
 }
 
