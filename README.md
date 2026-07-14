@@ -141,6 +141,42 @@ call `setDriveP45`).
 
 Register scaling (×10 per the JMC manual) is handled inside the library.
 
+## Position range & travel limits
+
+**Hard limit: ±2,147,483,647 steps** (signed 32-bit — the width of the drive's
+position registers 0x607A/0x6064). The library carries the full range
+end-to-end: `long` positions, 32-bit Modbus transfers, and `P:` commands parse
+10-digit values, positive or negative. A single move may span the whole range —
+the drive limits the counter width, not the move length.
+
+What that means in revolutions depends on the drive's P17 (steps/rev):
+
+| P17 setting | Steps/rev | Max travel from zero (each direction) |
+|---|---|---|
+| 2 (factory default) | 1,600 | ≈ 1,342,000 revolutions |
+| 10 | 4,000 | ≈ 536,800 revolutions |
+| 7 (largest preset) | 51,200 | ≈ 41,900 revolutions |
+
+For any positioning mechanism this is effectively unlimited — at 4,000
+steps/rev and 18 RPM you would have to run ~20 days in one direction to reach
+the limit.
+
+**Reliability notes:**
+
+1. **Counter wrap.** An application that rotates endlessly in one direction
+   (e.g. a display turntable) will eventually pass +2,147,483,647 and wrap to
+   negative — the drive gives no warning. Use **velocity mode** (`VS`) for
+   endless rotation (it consumes no position range), or periodically re-zero
+   at a known point (`Z` / homing) to pull the counter back.
+2. **Accuracy is closed-loop, not count-limited.** These are stepper-servos
+   with encoders: every step in the range is addressed exactly. If the motor
+   physically can't follow (jam, overload), the drive raises the over-position
+   fault (status bit13 / 0x1001 bit5, threshold set by drive P16) and the
+   library pushes it as `EVENT:FAULT`.
+3. **Practical rule:** treat ±2 billion steps as the absolute envelope, set
+   your working zero with `Z`/`ZO` at commissioning, and use velocity mode for
+   anything that spins forever.
+
 ## Advanced use
 
 `JMCController::motor(i)` returns the underlying `JMCMotor*` for direct API
