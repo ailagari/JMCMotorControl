@@ -1,5 +1,6 @@
 /*==============================================================================
   JMCMotorControl.cpp  -  implementation (JMCBus + JMCMotor + JMCController)
+  Author: LAGARI A <lagariscience@gmail.com>  |  License: MIT
 ==============================================================================*/
 #include "JMCMotorControl.h"
 #include <Controllino.h>
@@ -218,8 +219,10 @@ JMCResult JMCMotor::ctrl(uint16_t value) {
   return _last;
 }
 
-uint16_t JMCMotor::toSpeedReg16(float rps) { return (uint16_t)lroundf(rps * 10.0f); }
-int32_t  JMCMotor::toSpeedReg32(float rps) { return (int32_t)lroundf(rps * 10.0f); }
+// rps -> speed register counts. Scale follows drive P45 (see setSpeedScale):
+// P45=0 (factory default) -> 1 count per rps; P45=1 -> 10 counts per rps.
+int32_t JMCMotor::spdReg(float rps) const { return (int32_t)lroundf(rps * _speedScale); }
+
 uint16_t JMCMotor::toAccelReg(float rps_s) {
   long v = lroundf(rps_s * 10.0f);
   if (v < 0)     v = 0;
@@ -265,8 +268,8 @@ JMCResult JMCMotor::begin(float acceleration, float deceleration) {
 
   // Safe, slow homing defaults (zero speeds make the drive reject homing).
   setHomingAccel(_accel > 0.0f ? _accel : 5.0f);
-  write32(_slave, JMCReg::HOME_SPEED,   toSpeedReg32(0.3f));
-  write32(_slave, JMCReg::HOME_ZEROSPD, toSpeedReg32(0.3f));
+  write32(_slave, JMCReg::HOME_SPEED,   spdReg(0.3f));
+  write32(_slave, JMCReg::HOME_ZEROSPD, spdReg(0.3f));
 
   getStatusWord();          // presence probe -> sets _last
   return _last;
@@ -283,6 +286,10 @@ JMCResult JMCMotor::setAccelDecel(float accel_rps_s, float decel_rps_s) {
   JMCResult r = _bus.writeSingle(_slave, JMCReg::ACCEL, toAccelReg(accel_rps_s));
   if (r != JMC_OK) { _last = r; return r; }
   _last = _bus.writeSingle(_slave, JMCReg::DECEL, toAccelReg(decel_rps_s));
+  // Quick-stop ramp (0x6085) defaults to 0 in the drive, which would make a
+  // "fast brake" (quick-stop code 2) undefined - keep it at the normal decel
+  // so B:2 always has a sane ramp. Override via bus if a harder stop is wanted.
+  _bus.writeSingle(_slave, JMCReg::QS_DECEL, toAccelReg(decel_rps_s));
   return _last;
 }
 
@@ -309,7 +316,7 @@ JMCResult JMCMotor::preparePositionMove(long steps, float velocity_rps, bool abs
   _moveBase = absolute ? CW_ENABLE : (CW_ENABLE | CW_RELATIVE);
   // Relative moves use drive-side bit6 only - adding the current position in
   // software as well was the classic double-count bug.
-  write32(_slave, JMCReg::TARGET_VEL, toSpeedReg32(fabs(velocity_rps)));
+  write32(_slave, JMCReg::TARGET_VEL, spdReg(fabs(velocity_rps)));
   write32(_slave, JMCReg::TARGET_POS, (int32_t)steps);
   return _last;
 }
@@ -330,7 +337,7 @@ JMCResult JMCMotor::setVelocity(float velocity_rps) {
 }
 
 JMCResult JMCMotor::setTargetVelocity(float velocity_rps) {
-  return write32(_slave, JMCReg::TARGET_VEL, toSpeedReg32(velocity_rps));
+  return write32(_slave, JMCReg::TARGET_VEL, spdReg(velocity_rps));
 }
 
 JMCResult JMCMotor::prepareVelocityMode(float velocity_rps) {
@@ -343,15 +350,15 @@ JMCResult JMCMotor::prepareVelocityMode(float velocity_rps) {
 float JMCMotor::getVelocity() {
   int32_t v = 0;
   read32(JMCReg::VEL_ACTUAL, v);
-  return v / 10.0f;               // manual: actual rps = register / 10
+  return v / _speedScale;         // same unit scale as the target registers
 }
 
 JMCResult JMCMotor::setHomingVelocity(float velocity_rps) {
-  return write32(_slave, JMCReg::HOME_SPEED, toSpeedReg32(fabs(velocity_rps)));
+  return write32(_slave, JMCReg::HOME_SPEED, spdReg(fabs(velocity_rps)));
 }
 
 JMCResult JMCMotor::setHomingZeroVelocity(float velocity_rps) {
-  return write32(_slave, JMCReg::HOME_ZEROSPD, toSpeedReg32(fabs(velocity_rps)));
+  return write32(_slave, JMCReg::HOME_ZEROSPD, spdReg(fabs(velocity_rps)));
 }
 
 JMCResult JMCMotor::setHomingAccel(float accel_rps_s) {
@@ -446,13 +453,13 @@ bool JMCMotor::hasFault()        { uint16_t s = getStatusWord(); return (_last =
 JMCResult JMCMotor::broadcastPrepareMove(long steps, float velocity_rps, bool absolute) {
   _bus.writeSingle(0, JMCReg::MODE, MODE_POSITION);
   _moveBase = absolute ? CW_ENABLE : (CW_ENABLE | CW_RELATIVE);
-  write32(0, JMCReg::TARGET_VEL, toSpeedReg32(fabs(velocity_rps)));
+  write32(0, JMCReg::TARGET_VEL, spdReg(fabs(velocity_rps)));
   write32(0, JMCReg::TARGET_POS, (int32_t)steps);
   return _last;
 }
 
 JMCResult JMCMotor::broadcastSetVelocity(float velocity_rps) {
-  return write32(0, JMCReg::TARGET_VEL, toSpeedReg32(velocity_rps));
+  return write32(0, JMCReg::TARGET_VEL, spdReg(velocity_rps));
 }
 
 JMCResult JMCMotor::broadcastEnableMovement() {
@@ -548,6 +555,14 @@ void JMCController::setMotionDefaults(float accel_rps_s, float decel_rps_s,
   _defHomingVel = homingVel_rps;
 }
 
+void JMCController::setDriveP45(uint8_t p45) {
+  // P45=0: speed register unit is 1 rps   -> 1 count per rps (factory default).
+  // P45=1: speed register unit is 0.1 rps -> 10 counts per rps.
+  _speedScale = (p45 == 0) ? 1.0f : 10.0f;
+  for (uint8_t i = 0; i < JMC_MAX_MOTORS; i++)
+    if (_m[i]) _m[i]->setSpeedScale(_speedScale);
+}
+
 uint8_t JMCController::begin(uint32_t baud) {
   _bus.beginControllino(baud);
   // Short per-attempt timeouts so a dead drive can't stall the loop long.
@@ -560,6 +575,7 @@ uint8_t JMCController::begin(uint32_t baud) {
   uint8_t found = 0;
   for (uint8_t i = 0; i < _count; i++) {
     if (!_m[i]) _m[i] = new JMCMotor(_bus, i + 1);   // slave IDs 1..count
+    _m[i]->setSpeedScale(_speedScale);               // match drive P45 unit
     _storedVel[i] = _defVel;
     JMCResult r = _m[i]->begin(_defAccel, _defDecel);
     _m[i]->setHomingVelocity(_defHomingVel);

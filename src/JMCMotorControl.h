@@ -1,6 +1,10 @@
 /*==============================================================================
   JMCMotorControl.h  -  JMC servo/stepper drive control library for Controllino
 ==============================================================================
+  Author : LAGARI A <lagariscience@gmail.com>
+  License: MIT
+  Repo   : https://github.com/ailagari/JMCMotorControl
+
   Complete control stack for JMC integrated servo/stepper drives (IHSS/IHT
   "-RC" series) over Modbus-RTU / RS-485, with a ready-to-use UDP command
   system (JMC_CONTROLLINO_V3).
@@ -223,6 +227,12 @@ class JMCMotor {
     JMCResult broadcastStartMovement();
     JMCResult broadcastStop();
 
+    // Speed-register scale: counts written per 1 rps. Depends on drive P45:
+    //   P45 = 0 -> unit 1 rps   -> scale 1  (factory default, library default)
+    //   P45 = 1 -> unit 0.1 rps -> scale 10 (the Modbus manual's examples)
+    void  setSpeedScale(float countsPerRps) { if (countsPerRps > 0) _speedScale = countsPerRps; }
+    float speedScale() const                { return _speedScale; }
+
     uint8_t   slaveId() const    { return _slave; }
     JMCResult lastResult() const { return _last; }
     JMCBus&   bus() const        { return _bus; }
@@ -234,10 +244,10 @@ class JMCMotor {
     float     _decel = 1.0f;
     bool      _formatMSBFirst = true;   // 0x6000 == 0 (JMC default)
     uint16_t  _moveBase = 0x000F;
+    float     _speedScale = 1.0f;       // counts per rps (drive P45 = 0, factory default)
     JMCResult _last = JMC_OK;
 
-    static uint16_t toSpeedReg16(float rps);
-    static int32_t  toSpeedReg32(float rps);
+    int32_t spdReg(float rps) const;    // rps -> speed register counts
     static uint16_t toAccelReg(float rps_s);
 
     JMCResult write32(uint8_t slave, uint16_t reg, int32_t value);
@@ -266,6 +276,12 @@ class JMCController {
     void setMotorCount(uint8_t count);                 // 1..JMC_MAX_MOTORS
     void setMotionDefaults(float accel_rps_s, float decel_rps_s,
                            float velocity_rps, float homingVel_rps);
+
+    // Match the drives' P45 "target speed unit" parameter so commanded rps is
+    // physically correct. P45=0 is the drive factory default and the library
+    // default; call setDriveP45(1) only if your drives are configured with
+    // P45=1 (register unit 0.1 rps).
+    void setDriveP45(uint8_t p45);
 
     // ---- Lifecycle ----------------------------------------------------------
     // Brings up RS-485 (Controllino mode), Ethernet/UDP and all motors.
@@ -313,6 +329,7 @@ class JMCController {
     // setMotionDefaults() or at runtime with the V / VA / HV commands.
     float _defAccel = 0.5f, _defDecel = 0.5f;
     float _defVel   = 0.3f, _defHomingVel = 0.3f;
+    float _speedScale = 1.0f;              // counts per rps (drive P45 = 0 default)
     long  _homingOffset[JMC_MAX_MOTORS];   // steps after sensor trigger (HO cmd)
 
     uint32_t _lastTick = 0;

@@ -90,10 +90,30 @@ never delay limit detection on live motors.
 
 ## Drive setup (once per drive)
 
+> **⚠ Factory default is CANopen, not Modbus!** Per the IHSS60-R/RC manual,
+> P43 defaults to **1** (CANopen). If a drive never answers (`I` reports NOT
+> DETECTED, green LED flickering), set **P43 = 0** (RS-485/Modbus) on the
+> front panel and restart the drive. This is the most common first-run issue.
+
+- **P43 = 0** — RS-485 / Modbus-RTU mode (factory default is 1 = CANopen!). Restart required.
 - Unique **slave ID** 1..N (P40 / rotary switches: `ID = S2×16 + S1`)
-- **Baud** 115200 (P41 / BD switch = 7), **P43 = 0** (RS-485 mode)
-- Sensor polarity **P42** (0 = PNP, 1 = NPN)
+- **Baud** 115200 (P41 / BD switch = 7). Restart required.
+- Sensor polarity **P42** (0 = PNP, 1 = NPN; factory default 1 = NPN). Restart required.
+- **P45 (target speed unit)** — must match the sketch! `P45=0` (drive factory
+  default, and the library default) → register unit 1 rps. `P45=1` → unit
+  0.1 rps: call `jmc.setDriveP45(1)` in the sketch, or speeds will be **10×
+  off** in one direction or the other.
+- **P17 (pulses/revolution)** — sets how many steps = 360°. **Factory default
+  is setting 2 = 1600 steps/rev.** Options: 0=user-defined (via P20), 1=800,
+  2=1600, 3=3200, 4=6400, 5=12800, 6=25600, 7=51200, 8=1000, 9=2000,
+  **10=4000**, 11=5000, 12=8000, 13=10000, 14=20000, 15=40000. Panel-set
+  only (restart required), not reachable over Modbus. Positions in this
+  library are raw steps, so `P:4000` = one full turn only when P17 = 4000.
 - RS-485 A/B daisy-chain, 120 Ω termination at the last drive
+
+**Verify speed scaling on first bring-up:** send `V:1` then `VS` — the shaft
+must turn exactly 60 revolutions in 60 s. 10× off → P45 mismatch (fix P45 or
+call `setDriveP45`).
 
 ## Units
 
@@ -113,7 +133,11 @@ calls (`moveToPosition`, `performHoming`, `getDetailedStatus`, …), and
 `writeMultiple`) — every call returns a `JMCResult` so comms failures are
 never silent.
 
-## License / status
+## Author / license / status
 
-Author: Sentient By Elysian. Bench-test before production use: `I` → `L` →
-small `P:` move → trip a limit switch and watch for the `EVENT:LIMIT` packet.
+**Author:** LAGARI A — lagariscience@gmail.com
+**License:** MIT (see LICENSE)
+**Repository:** https://github.com/ailagari/JMCMotorControl
+
+Bench-test before production use: `I` → `L` → small `P:` move → trip a limit
+switch and watch for the `EVENT:LIMIT` packet.

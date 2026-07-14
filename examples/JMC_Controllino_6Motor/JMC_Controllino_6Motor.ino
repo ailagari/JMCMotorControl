@@ -1,5 +1,6 @@
 /*
   JMC_Controllino_6Motor - complete 6-motor JMC controller in ~15 lines.
+  Part of JMCMotorControl by LAGARI A <lagariscience@gmail.com> (MIT license).
 
   Controls up to 6 JMC integrated servo/stepper drives (IHSS/IHT "-RC")
   over the Controllino's built-in RS-485 (Serial3), commanded via UDP with
@@ -43,6 +44,12 @@ void setup() {
   // Homing offset (steps to move after the origin sensor triggers) is set at
   // runtime with HO:  e.g. HO:1000,1000  then home with  H3
   jmc.setMotionDefaults(0.5, 0.5, 0.3, 0.3);
+
+  // Speed unit: the library default matches the drive factory default
+  // (P45 = 0, register unit = 1 rps). ONLY if your drives are configured
+  // with P45 = 1 (unit 0.1 rps), uncomment:
+  // jmc.setDriveP45(1);
+  // Verify on first bring-up: V:1 then VS -> exactly 60 shaft revs in 60 s.
 
   uint8_t found = jmc.begin();                // bus + Ethernet + motors + "READY:n/6"
   Serial.print(found);
