@@ -14,6 +14,9 @@
     SD                 detailed human-readable status, all motors
     B / B:3            stop all (controlled / immediate)
     L / Z / ZO:5000    loosen brakes / zero here / redefine position
+    HV:0.3 / HO:1000   homing speed / offset steps past the origin sensor
+    MC:2 / MC:?        change/read active motor count at runtime (1..32,
+                       great for bench tests; reverts to sketch on reboot)
     R / I / X          reset / detect / reboot
 
   The controller also PUSHES events to the PC without being asked:
@@ -39,7 +42,10 @@ void setup() {
   jmc.setNetwork(mac,
                  IPAddress(192, 168, 1, 101), 8001,   // this Controllino
                  IPAddress(192, 168, 1, 100), 8000);  // PC (replies + events)
-  jmc.setMotorCount(6);                       // slave IDs 1..6 (up to 32 supported)
+  // Motors on this bus: set per project (1..32, slave IDs 1..n).
+  // This value is what the controller returns to after every reboot;
+  // during commissioning you can override it live with the UDP command MC:n.
+  jmc.setMotorCount(6);
   // Gentle defaults: accel/decel 0.5 rps/s, run 0.3 rps (18 RPM), homing 0.3 rps.
   // Raise these once your mechanics are proven, or at runtime via V / VA / HV.
   // Homing offset (steps to move after the origin sensor triggers) is set at
