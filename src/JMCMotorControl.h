@@ -348,6 +348,7 @@ class JMCController {
     // Engine
     void handleUdp();
     void serviceMonitor();
+    bool initMotorSlot(uint8_t i);   // allocate + probe + init one motor slot
 
     // Command handlers (JMC_CONTROLLINO_V3)
     void handlePosition(const String& args);
@@ -367,6 +368,7 @@ class JMCController {
     void handleZeroStatus();
     void handleReset(const String& args);
     void handleInit();
+    void handleMotorCount(const String& args);
     // Extensions
     void handleVelocity(const String& args);
     void handleVelocityAll(const String& args);

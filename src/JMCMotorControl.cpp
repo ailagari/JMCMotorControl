@@ -574,42 +574,52 @@ uint8_t JMCController::begin(uint32_t baud) {
 
   uint8_t found = 0;
   for (uint8_t i = 0; i < _count; i++) {
-    if (!_m[i]) _m[i] = new JMCMotor(_bus, i + 1);   // slave IDs 1..count
-    _m[i]->setSpeedScale(_speedScale);               // match drive P45 unit
-    _storedVel[i] = _defVel;
-
-    // Fast presence probe first, so a bus configured for 32 motors with only
-    // a few connected still boots in well under a second.
-    _bus.setResponseTimeout(PROBE_TIMEOUT_MS);
-    _bus.setRetries(0);
-    bool present = _m[i]->isPresent();
-    _bus.setResponseTimeout(30);
-    _bus.setRetries(1);
-
-    JMCResult r = JMC_ERR_TIMEOUT;
-    if (present) {
-      r = _m[i]->begin(_defAccel, _defDecel);
-      _m[i]->setHomingVelocity(_defHomingVel);
-      _m[i]->setHomingZeroVelocity(_defHomingVel);
-    }
-    _cache[i].online = (r == JMC_OK);
-    if (r == JMC_OK) {
-      found++;
-      uint16_t s = _m[i]->getStatusWord();
-      _cache[i].status = s;
-      _cache[i].cw     = s & 0x4000;
-      _cache[i].ccw    = s & 0x8000;
-      _cache[i].fault  = s & 0x0008;
-    }
+    bool ok = initMotorSlot(i);
+    if (ok) found++;
     if (Serial) {
       Serial.print(F("JMC motor "));
       Serial.print(i + 1);
       Serial.print(F(" -> "));
-      Serial.println(JMCBus::resultName(r));
+      Serial.println(JMCBus::resultName(_m[i]->lastResult()));
     }
   }
   reply("READY:" + String(found) + "/" + String(_count));
   return found;
+}
+
+// Allocate (if needed), fast-probe and initialise one motor slot.
+// The fast presence probe keeps boot quick even with many empty slots.
+bool JMCController::initMotorSlot(uint8_t i) {
+  if (!_m[i]) {
+    _m[i] = new JMCMotor(_bus, i + 1);   // slave IDs 1..count
+    _storedVel[i]    = _defVel;
+    _homingOffset[i] = 0;
+  }
+  _m[i]->setSpeedScale(_speedScale);     // match drive P45 unit
+
+  _bus.setResponseTimeout(PROBE_TIMEOUT_MS);
+  _bus.setRetries(0);
+  bool present = _m[i]->isPresent();
+  _bus.setResponseTimeout(30);
+  _bus.setRetries(1);
+
+  JMCResult r = JMC_ERR_TIMEOUT;
+  if (present) {
+    r = _m[i]->begin(_defAccel, _defDecel);
+    _m[i]->setHomingVelocity(_defHomingVel);
+    _m[i]->setHomingZeroVelocity(_defHomingVel);
+    _m[i]->setHomingOffset(_homingOffset[i]);
+  }
+  _cache[i].online  = (r == JMC_OK);
+  _cache[i].failCnt = 0;
+  if (r == JMC_OK) {
+    uint16_t s = _m[i]->getStatusWord();
+    _cache[i].status = s;
+    _cache[i].cw     = s & 0x4000;
+    _cache[i].ccw    = s & 0x8000;
+    _cache[i].fault  = s & 0x0008;
+  }
+  return r == JMC_OK;
 }
 
 void JMCController::run() {
@@ -700,6 +710,7 @@ void JMCController::handleUdp() {
   else if (head == "BS") handleBrakeStatus();
   else if (head == "ZS") handleZeroStatus();
   else if (head == "ZO") handleZeroOffset(args);
+  else if (head == "MC") handleMotorCount(args);
   else if (head == "I")  handleInit();
   else if (head == "P")  handlePosition(args);
   else if (head == "V")  handleVelocity(args);
@@ -1290,6 +1301,36 @@ void JMCController::handleInit() {
   out += "Total motors detected: " + String(found) + " of " + String(_count);
   if (found == (int)_count) out += "\nSUCCESS: All expected motors detected and initialized!";
   reply(out);
+}
+
+// ---- MC : motor count (runtime) --------------------------------------------
+// Different projects run different bus sizes (e.g. 6 here, 12 elsewhere).
+//   MC:?    read the active motor count
+//   MC:12   set count to 12 (1..32); newly added slots are probed+initialised.
+// Not persistent: after reboot the sketch's setMotorCount() value applies.
+void JMCController::handleMotorCount(const String& args) {
+  String a = args; a.trim();
+  if (!a.length() || a.indexOf('?') >= 0) {
+    reply("MC: " + String(_count) + " motors (slave IDs 1.." + String(_count) + ")");
+    return;
+  }
+  int n = a.toInt();
+  if (n < 1 || n > JMC_MAX_MOTORS) {
+    reply("ERR:MC range 1.." + String(JMC_MAX_MOTORS));
+    return;
+  }
+
+  uint8_t oldCount = _count;
+  _count = (uint8_t)n;
+  if (_monIdx >= _count) _monIdx = -1;
+
+  int online = 0;
+  for (uint8_t i = 0; i < _count; i++) {
+    if (i < oldCount && _m[i]) { if (_cache[i].online) online++; continue; }
+    if (initMotorSlot(i)) online++;    // probe + init slots added just now
+  }
+  reply("MC: " + String(_count) + " motors, " + String(online) +
+        " online (not saved - set in sketch with setMotorCount)");
 }
 
 //==============================================================================

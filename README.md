@@ -61,6 +61,7 @@ Flash it, then send UDP text commands from any PC/PLC/app.
 | `ZS` | zero status | `ZERO STATUS: … \| ALL_ZERO_SET` |
 | `R` / `R:1,2` / `R:all` | alarm reset + re-initialise | confirmation |
 | `I` | detect + initialise all motors | detection report |
+| `MC:n` / `MC:?` | set / read the active motor count (1–32) at runtime — new slots are probed + initialised. Not persistent; the sketch's `setMotorCount()` applies after reboot | `MC: 6 motors, 6 online` |
 | `X` | reboot controller | `System restart initiated…` |
 | `V:v1,…` / `V:?` | set / read stored run velocities (rps) | confirmation |
 | `VA:<rps>` | broadcast velocity target | confirmation |
@@ -92,7 +93,9 @@ powered up after the controller) is automatically re-initialised.
 
 ## Scaling to 32 motors
 
-- `jmc.setMotorCount(n)` accepts 1–32 (slave IDs 1..n).
+- `jmc.setMotorCount(n)` accepts 1–32 (slave IDs 1..n) — set it per project in
+  the sketch. For commissioning you can also change it live over UDP with
+  `MC:n` (reverts to the sketch value on reboot).
 - **Synchronised launch is broadcast-based**: when a `P:` command addresses
   every motor (and always for `VS`), the arm+start are sent as two single
   broadcast frames (slave 0) — all drives start in the same instant, with no
