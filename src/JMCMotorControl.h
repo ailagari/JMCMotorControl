@@ -227,9 +227,11 @@ class JMCMotor {
     JMCResult broadcastStartMovement();
     JMCResult broadcastStop();
 
-    // Speed-register scale: counts written per 1 rps. Depends on drive P45:
-    //   P45 = 0 -> unit 1 rps   -> scale 1  (factory default, library default)
-    //   P45 = 1 -> unit 0.1 rps -> scale 10 (the Modbus manual's examples)
+    // Speed-register scale: counts written per 1 rps. Default 10, per the JMC
+    // Modbus manual ("setting value is 10 times the actual value") -> 0.1 rps
+    // resolution, decimal speeds like 0.3 rps work. If a drive measurably runs
+    // 10x FASTER than commanded, it uses whole-rps units: set scale 1
+    // (JMCController::setDriveP45(0) does this for all motors).
     void  setSpeedScale(float countsPerRps) { if (countsPerRps > 0) _speedScale = countsPerRps; }
     float speedScale() const                { return _speedScale; }
 
@@ -244,7 +246,7 @@ class JMCMotor {
     float     _decel = 1.0f;
     bool      _formatMSBFirst = true;   // 0x6000 == 0 (JMC default)
     uint16_t  _moveBase = 0x000F;
-    float     _speedScale = 1.0f;       // counts per rps (drive P45 = 0, factory default)
+    float     _speedScale = 10.0f;      // counts per rps (Modbus manual: rps x 10)
     JMCResult _last = JMC_OK;
 
     int32_t spdReg(float rps) const;    // rps -> speed register counts
@@ -278,10 +280,12 @@ class JMCController {
     void setMotionDefaults(float accel_rps_s, float decel_rps_s,
                            float velocity_rps, float homingVel_rps);
 
-    // Match the drives' P45 "target speed unit" parameter so commanded rps is
-    // physically correct. P45=0 is the drive factory default and the library
-    // default; call setDriveP45(1) only if your drives are configured with
-    // P45=1 (register unit 0.1 rps).
+    // Speed-unit correction. The library default follows the JMC Modbus
+    // manual: speed registers = rps x 10 (0.1 rps resolution, decimals work).
+    // Verify on first bring-up with V:1 + VS -> exactly 60 shaft revs/min.
+    // If a motor measurably runs 10x FASTER than commanded, its drive uses
+    // whole-rps units: call setDriveP45(0) (scale 1, whole rps only).
+    // setDriveP45(1) restores the default x10.
     void setDriveP45(uint8_t p45);
 
     // ---- Per-motor hardcoded settings (optional; motor IDs are 1-based) ----
@@ -339,7 +343,7 @@ class JMCController {
     // setMotionDefaults() or at runtime with the V / VA / HV commands.
     float _defAccel = 0.5f, _defDecel = 0.5f;
     float _defVel   = 0.3f, _defHomingVel = 0.3f;
-    float _speedScale = 1.0f;              // counts per rps (drive P45 = 0 default)
+    float _speedScale = 10.0f;             // counts per rps (Modbus manual: rps x 10)
     float _homingVel[JMC_MAX_MOTORS];      // per-motor homing speed (NAN = default)
     long  _homingOffset[JMC_MAX_MOTORS];   // steps after sensor trigger (HO cmd)
 
@@ -379,6 +383,7 @@ class JMCController {
     void handleReset(const String& args);
     void handleInit();
     void handleMotorCount(const String& args);
+    void handleDiagnose(const String& args);
     // Extensions
     void handleVelocity(const String& args);
     void handleVelocityAll(const String& args);

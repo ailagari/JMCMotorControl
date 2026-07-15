@@ -78,6 +78,7 @@ then copy the final numbers into the sketch as `setMotor...()` calls.
 | `R` / `R:1,2` / `R:all` | alarm reset + re-initialise | confirmation |
 | `I` | detect + initialise all motors | detection report |
 | `MC:n` / `MC:?` | set / read the active motor count (1–32) at runtime — new slots are probed + initialised. Not persistent; the sketch's `setMotorCount()` applies after reboot | `MC: 6 motors, 6 online` |
+| `DG:n` | low-level diagnosis of motor n: reads back format/status/mode/targets/ramps from the drive and tests both Modbus write types. Use when a motor "replies OK but doesn't move" | register dump |
 | `X` | reboot controller | `System restart initiated…` |
 | `V:v1,…` / `V:?` | set / read stored run velocities (rps) | confirmation |
 | `VA:<rps>` | broadcast velocity target | confirmation |
@@ -134,10 +135,11 @@ powered up after the controller) is automatically re-initialised.
 - Unique **slave ID** 1..N (P40 / rotary switches: `ID = S2×16 + S1`)
 - **Baud** 115200 (P41 / BD switch = 7). Restart required.
 - Sensor polarity **P42** (0 = PNP, 1 = NPN; factory default 1 = NPN). Restart required.
-- **P45 (target speed unit)** — must match the sketch! `P45=0` (drive factory
-  default, and the library default) → register unit 1 rps. `P45=1` → unit
-  0.1 rps: call `jmc.setDriveP45(1)` in the sketch, or speeds will be **10×
-  off** in one direction or the other.
+- **Speed units** — the library follows the JMC Modbus manual: speed
+  registers are written as **rps × 10** (0.1 rps resolution, so decimal
+  speeds like `V:0.3` are exact). Verify on first bring-up (below); if a
+  motor measurably runs **10× faster** than commanded, that drive uses
+  whole-rps units — call `jmc.setDriveP45(0)`.
 - **P17 (pulses/revolution)** — sets how many steps = 360°. **Factory default
   is setting 2 = 1600 steps/rev.** Options: 0=user-defined (via P20), 1=800,
   2=1600, 3=3200, 4=6400, 5=12800, 6=25600, 7=51200, 8=1000, 9=2000,
@@ -147,16 +149,12 @@ powered up after the controller) is automatically re-initialised.
 - RS-485 A/B daisy-chain, 120 Ω termination at the last drive
 
 **Verify speed scaling on first bring-up:** send `V:1` then `VS` — the shaft
-must turn exactly 60 revolutions in 60 s. 10× off → P45 mismatch (fix P45 or
-call `setDriveP45`).
-
-**⚠ Speed resolution and P45:** with `P45=0` the drive resolves **whole rps
-only** (1 count = 1 rps) — a requested 0.3 rps has no representation. The
-library clamps nonzero speeds up to the 1 rps minimum so a move never silently
-gets velocity 0 ("OK" reply but no motion), but the motor will run at 1 rps,
-not 0.3. **If you need speeds below 1 rps (60 RPM), set `P45=1` on the drive
-panel and call `jmc.setDriveP45(1)`** — then the unit is 0.1 rps and `V:0.3`
-is exact.
+must turn exactly **60 revolutions in 60 s** (then `B` to stop).
+- Exactly 60 → scaling is correct, decimals work (`V:0.3` = 18 RPM).
+- ~600 revs (10× fast) → that drive uses whole-rps units: add
+  `jmc.setDriveP45(0)` (speeds then resolve in whole rps only).
+- No movement at all → run `DG:1` and check `vel6081` — if it reads 0, the
+  commanded speed didn't reach the drive; report the full DG output.
 
 ## Units
 

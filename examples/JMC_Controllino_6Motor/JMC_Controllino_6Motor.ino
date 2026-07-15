@@ -52,13 +52,11 @@ void setup() {
   // runtime with HO:  e.g. HO:1000,1000  then home with  H3
   jmc.setMotionDefaults(0.5, 0.5, 0.3, 0.3);
 
-  // Speed unit: the library default matches the drive factory default
-  // (P45 = 0, register unit = 1 rps). NOTE: with P45 = 0 the drive resolves
-  // WHOLE rps only - speeds below 1 rps are clamped up to 1 rps. If you need
-  // fine speeds like 0.3 rps (18 RPM), set P45 = 1 on the drive panel and
-  // uncomment:
-  // jmc.setDriveP45(1);
-  // Verify on first bring-up: V:1 then VS -> exactly 60 shaft revs in 60 s.
+  // Speed units follow the JMC Modbus manual: register = rps x 10, so
+  // decimal speeds like 0.3 rps (18 RPM) are exact.
+  // VERIFY on first bring-up: V:1 then VS -> exactly 60 shaft revs in 60 s.
+  // Only if a motor measurably runs 10x FASTER than commanded, uncomment:
+  // jmc.setDriveP45(0);   // that drive uses whole-rps units
 
   // Per-motor HARDCODED settings (optional, motor IDs 1-based). Runtime
   // commands (V / HV / HO / MC) are lost after a power failure - values set

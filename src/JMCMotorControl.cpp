@@ -219,14 +219,14 @@ JMCResult JMCMotor::ctrl(uint16_t value) {
   return _last;
 }
 
-// rps -> speed register counts. Scale follows drive P45 (see setSpeedScale):
-// P45=0 (factory default) -> 1 count per rps; P45=1 -> 10 counts per rps.
+// rps -> speed register counts. Default scale 10 per the JMC Modbus manual
+// ("setting value is 10 times the actual value"): 0.1 rps resolution, so
+// decimal speeds like 0.3 rps are exact (register 3). See setSpeedScale().
 int32_t JMCMotor::spdReg(float rps) const {
   int32_t v = (int32_t)lroundf(rps * _speedScale);
   // Guard against a silent no-move: a nonzero requested speed must never
-  // round down to 0 counts. With P45=0 the drive only resolves whole rps,
-  // so e.g. 0.3 rps would become 0 (target velocity 0 = motor never moves).
-  // For real sub-1-rps speeds set P45=1 on the drive + setDriveP45(1).
+  // round down to 0 counts (target velocity 0 = motor accepts the move but
+  // never turns).
   if (v == 0 && rps >  0.001f) v =  1;
   if (v == 0 && rps < -0.001f) v = -1;
   return v;
@@ -566,8 +566,9 @@ void JMCController::setMotionDefaults(float accel_rps_s, float decel_rps_s,
 }
 
 void JMCController::setDriveP45(uint8_t p45) {
-  // P45=0: speed register unit is 1 rps   -> 1 count per rps (factory default).
-  // P45=1: speed register unit is 0.1 rps -> 10 counts per rps.
+  // Default (1): register = rps x 10 per the Modbus manual - decimals work.
+  // setDriveP45(0): whole-rps units (scale 1) - use only if a motor
+  // measurably runs 10x faster than commanded.
   _speedScale = (p45 == 0) ? 1.0f : 10.0f;
   for (uint8_t i = 0; i < JMC_MAX_MOTORS; i++)
     if (_m[i]) _m[i]->setSpeedScale(_speedScale);
@@ -743,6 +744,7 @@ void JMCController::handleUdp() {
   else if (head == "ZS") handleZeroStatus();
   else if (head == "ZO") handleZeroOffset(args);
   else if (head == "MC") handleMotorCount(args);
+  else if (head == "DG") handleDiagnose(args);
   else if (head == "I")  handleInit();
   else if (head == "P")  handlePosition(args);
   else if (head == "V")  handleVelocity(args);
@@ -1363,6 +1365,72 @@ void JMCController::handleMotorCount(const String& args) {
   }
   reply("MC: " + String(_count) + " motors, " + String(online) +
         " online (not saved - set in sketch with setMotorCount)");
+}
+
+// ---- DG : low-level register diagnosis (DG:n) --------------------------------
+// Reads back what the drive ACTUALLY holds (mode, targets, ramps) and tests
+// both Modbus write types, so a "replies OK but doesn't move" case can be
+// pinpointed remotely. 32-bit registers are shown as raw hi,lo words.
+void JMCController::handleDiagnose(const String& args) {
+  String a = args; a.trim();
+  int id = a.toInt();
+  if (id < 1 || id > _count) { reply("ERR:DG usage DG:1.." + String(_count)); return; }
+  uint8_t slave = _m[id - 1]->slaveId();
+  uint16_t w[2];
+  JMCResult r;
+  String out = "DG M" + String(id) + ": ";
+
+  r = _bus.readHolding(slave, JMCReg::FORMAT, w, 1);
+  out += "fmt6000=";
+  out += (r == JMC_OK) ? String(w[0]) : String(JMCBus::resultName(r));
+
+  r = _bus.readHolding(slave, JMCReg::STATUS, w, 1);
+  out += " st6041=";
+  out += (r == JMC_OK) ? ("0x" + String(w[0], HEX)) : String(JMCBus::resultName(r));
+
+  r = _bus.readHolding(slave, JMCReg::MODE_DISP, w, 1);
+  out += " mode6061=";
+  out += (r == JMC_OK) ? String((int16_t)w[0]) : String(JMCBus::resultName(r));
+
+  r = _bus.readHolding(slave, JMCReg::ERROR, w, 1);
+  out += " err1001=";
+  out += (r == JMC_OK) ? ("0x" + String(w[0], HEX)) : String(JMCBus::resultName(r));
+
+  r = _bus.readHolding(slave, JMCReg::TARGET_POS, w, 2);
+  out += "\ntgt607A=";
+  out += (r == JMC_OK) ? (String(w[0]) + "," + String(w[1])) : String(JMCBus::resultName(r));
+
+  uint16_t tv[2] = {0, 0};
+  r = _bus.readHolding(slave, JMCReg::TARGET_VEL, tv, 2);
+  out += " vel6081=";
+  out += (r == JMC_OK) ? (String(tv[0]) + "," + String(tv[1])) : String(JMCBus::resultName(r));
+
+  r = _bus.readHolding(slave, JMCReg::ACCEL, w, 1);
+  uint16_t accVal = (r == JMC_OK) ? w[0] : 5;
+  out += " acc6083=";
+  out += (r == JMC_OK) ? String(w[0]) : String(JMCBus::resultName(r));
+
+  r = _bus.readHolding(slave, JMCReg::DECEL, w, 1);
+  out += " dec6084=";
+  out += (r == JMC_OK) ? String(w[0]) : String(JMCBus::resultName(r));
+
+  r = _bus.readHolding(slave, JMCReg::POS_ACTUAL, w, 2);
+  out += " pos6064=";
+  out += (r == JMC_OK) ? (String(w[0]) + "," + String(w[1])) : String(JMCBus::resultName(r));
+
+  // Write tests: rewrite values already in the drive (harmless, no motion).
+  r = _bus.writeSingle(slave, JMCReg::ACCEL, accVal);
+  out += "\nWRITE06=";
+  out += String(JMCBus::resultName(r));
+  if (r == JMC_ERR_EXCEPTION) out += "(exc" + String(_bus.lastException()) + ")";
+
+  r = _bus.writeMultiple(slave, JMCReg::TARGET_VEL, tv, 2);
+  out += " WRITE10=";
+  out += String(JMCBus::resultName(r));
+  if (r == JMC_ERR_EXCEPTION) out += "(exc" + String(_bus.lastException()) + ")";
+
+  out += " libScale=" + String(_speedScale, 0);
+  reply(out);
 }
 
 //==============================================================================
