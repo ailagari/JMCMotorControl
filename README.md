@@ -137,6 +137,10 @@ powered up after the controller) is automatically re-initialised.
 - Unique **slave ID** 1..N (P40 / rotary switches: `ID = S2×16 + S1`)
 - **Baud** 115200 (P41 / BD switch = 7). Restart required.
 - Sensor polarity **P42** (0 = PNP, 1 = NPN; factory default 1 = NPN). Restart required.
+- **P19 (speed smoothness, 0–10)** — for geared mechanisms set **5–8** (no
+  restart needed). It rounds the corners of the accel/decel ramp (S-curve
+  effect) so backlash is taken up softly. Combine with gentle ramps
+  (`AD:0.1`) for the kindest drivetrain treatment. Factory default 2.
 - **Speed units** — the library follows the JMC Modbus manual: speed
   registers are written as **rps × 10** (0.1 rps resolution, so decimal
   speeds like `V:0.3` are exact). Verify on first bring-up (below); if a
