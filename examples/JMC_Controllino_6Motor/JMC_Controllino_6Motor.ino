@@ -2,6 +2,10 @@
   JMC_Controllino_6Motor - complete 6-motor JMC controller in ~15 lines.
   Part of JMCMotorControl by LAGARI A <lagariscience@gmail.com> (MIT license).
 
+  Library + documentation: https://github.com/ailagari/JMCMotorControl
+  Full command/response reference: extras/PROTOCOL.md in the repository
+  (every command's syntax, all reply strings, events, and recipes).
+
   Controls JMC integrated servo/stepper drives (IHSS/IHT "-RC") over the
   Controllino's built-in RS-485 (Serial3), commanded via UDP with the
   JMC_CONTROLLINO_V3 command system. This example runs 6 motors; the library

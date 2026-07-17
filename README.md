@@ -61,6 +61,11 @@ then copy the final numbers into the sketch as `setMotor...()` calls.
 
 ## Command reference (JMC_CONTROLLINO_V3)
 
+> 📖 **Full protocol documentation** — every command's exact syntax, all
+> response strings, event formats, status-bit tables and ready-made recipes:
+> **[extras/PROTOCOL.md](extras/PROTOCOL.md)**. The table below is the short
+> version.
+
 | Command | Action | Reply |
 |---|---|---|
 | `P:p1,p2,…` | synchronised absolute move (blank = skip motor) | `OK` |
