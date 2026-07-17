@@ -296,6 +296,8 @@ class JMCController {
     void setMotorVelocity(uint8_t motorId, float rps);        // run speed
     void setMotorHomingVelocity(uint8_t motorId, float rps);  // homing speed
     void setMotorHomingOffset(uint8_t motorId, long steps);   // past sensor
+    // Gentle ramps for geared mechanisms (rps/s; resolution 0.1 rps/s).
+    void setMotorAccelDecel(uint8_t motorId, float accel_rps_s, float decel_rps_s);
 
     // ---- Lifecycle ----------------------------------------------------------
     // Brings up RS-485 (Controllino mode), Ethernet/UDP and all motors.
@@ -345,6 +347,8 @@ class JMCController {
     float _defVel   = 0.3f, _defHomingVel = 0.3f;
     float _speedScale = 10.0f;             // counts per rps (Modbus manual: rps x 10)
     float _homingVel[JMC_MAX_MOTORS];      // per-motor homing speed (NAN = default)
+    float _accelSet[JMC_MAX_MOTORS];       // per-motor accel rps/s (NAN = default)
+    float _decelSet[JMC_MAX_MOTORS];       // per-motor decel rps/s (NAN = default)
     long  _homingOffset[JMC_MAX_MOTORS];   // steps after sensor trigger (HO cmd)
 
     uint32_t _lastTick = 0;
@@ -384,6 +388,7 @@ class JMCController {
     void handleInit();
     void handleMotorCount(const String& args);
     void handleDiagnose(const String& args);
+    void handleAccelDecel(const String& args);
     // Extensions
     void handleVelocity(const String& args);
     void handleVelocityAll(const String& args);

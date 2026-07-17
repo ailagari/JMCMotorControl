@@ -75,6 +75,7 @@ setHomingZeroVelocity	KEYWORD2
 setMotorVelocity	KEYWORD2
 setMotorHomingVelocity	KEYWORD2
 setMotorHomingOffset	KEYWORD2
+setMotorAccelDecel	KEYWORD2
 run	KEYWORD2
 motor	KEYWORD2
 busRef	KEYWORD2

@@ -15,6 +15,7 @@
     B / B:3            stop all (controlled / immediate)
     L / Z / ZO:5000    loosen brakes / zero here / redefine position
     HV:0.3 / HO:1000   homing speed / offset steps past the origin sensor
+    AD:0.2 / AD:?      accel+decel rps/s, all motors (slow ramps for gears)
     MC:2 / MC:?        change/read active motor count at runtime (1..32,
                        great for bench tests; reverts to sketch on reboot)
     R / I / X          reset / detect / reboot

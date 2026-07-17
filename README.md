@@ -53,6 +53,7 @@ re-applied on every boot **and** whenever a drive comes back online:
 jmc.setMotorVelocity(1, 0.5);        // M1 run speed 0.5 rps
 jmc.setMotorHomingVelocity(1, 0.2);  // M1 homing speed 0.2 rps
 jmc.setMotorHomingOffset(1, 1000);   // M1 stops 1000 steps past the origin sensor
+jmc.setMotorAccelDecel(1, 0.2, 0.1); // M1 gentle ramps for gears (rps/s)
 ```
 
 Typical pattern: tune values live with `V`/`HV`/`HO` during commissioning,
@@ -78,6 +79,7 @@ then copy the final numbers into the sketch as `setMotor...()` calls.
 | `R` / `R:1,2` / `R:all` | alarm reset + re-initialise | confirmation |
 | `I` | detect + initialise all motors | detection report |
 | `MC:n` / `MC:?` | set / read the active motor count (1–32) at runtime — new slots are probed + initialised. Not persistent; the sketch's `setMotorCount()` applies after reboot | `MC: 6 motors, 6 online` |
+| `AD:a[,d]` / `AD:?` | set / read acceleration & deceleration (rps/s, all motors; one value = both). For geared mechanisms needing slow ramps. Resolution 0.1 rps/s; remembered for drive re-inits; hardcode with `setMotionDefaults`/`setMotorAccelDecel` | `AD: all motors accel=0.2 decel=0.2 rps/s` |
 | `DG:n` | low-level diagnosis of motor n: reads back format/status/mode/targets/ramps from the drive and tests both Modbus write types. Use when a motor "replies OK but doesn't move" | register dump |
 | `X` | reboot controller | `System restart initiated…` |
 | `V:v1,…` / `V:?` | set / read stored run velocities (rps) | confirmation |

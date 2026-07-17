@@ -233,7 +233,8 @@ int32_t JMCMotor::spdReg(float rps) const {
 }
 
 uint16_t JMCMotor::toAccelReg(float rps_s) {
-  long v = lroundf(rps_s * 10.0f);
+  long v = lroundf(rps_s * 10.0f);        // manual: register = rps/s x 10
+  if (v == 0 && rps_s > 0.001f) v = 1;    // never 0 (= instant): min 0.1 rps/s
   if (v < 0)     v = 0;
   if (v > 65535) v = 65535;
   return (uint16_t)v;
@@ -537,6 +538,8 @@ JMCController::JMCController(HardwareSerial& rs485Serial) : _bus(rs485Serial) {
     _m[i] = nullptr;
     _storedVel[i]    = NAN;   // NAN = "not hardcoded" -> default applied at init
     _homingVel[i]    = NAN;
+    _accelSet[i]     = NAN;
+    _decelSet[i]     = NAN;
     _homingOffset[i] = 0;
     _offlineTry[i]   = 0;
     _cache[i] = { false, 0, 0, false, false, false, false };
@@ -597,6 +600,14 @@ void JMCController::setMotorHomingOffset(uint8_t motorId, long steps) {
   if (_m[i] && _cache[i].online) _m[i]->setHomingOffset(steps);
 }
 
+void JMCController::setMotorAccelDecel(uint8_t motorId, float accel_rps_s, float decel_rps_s) {
+  if (motorId < 1 || motorId > JMC_MAX_MOTORS) return;
+  uint8_t i = motorId - 1;
+  _accelSet[i] = accel_rps_s;
+  _decelSet[i] = decel_rps_s;
+  if (_m[i] && _cache[i].online) _m[i]->setAccelDecel(accel_rps_s, decel_rps_s);
+}
+
 uint8_t JMCController::begin(uint32_t baud) {
   _bus.beginControllino(baud);
   // Short per-attempt timeouts so a dead drive can't stall the loop long.
@@ -628,6 +639,8 @@ bool JMCController::initMotorSlot(uint8_t i) {
   // Resolve "not hardcoded" sentinels to the global defaults.
   if (isnan(_storedVel[i])) _storedVel[i] = _defVel;
   if (isnan(_homingVel[i])) _homingVel[i] = _defHomingVel;
+  if (isnan(_accelSet[i]))  _accelSet[i]  = _defAccel;
+  if (isnan(_decelSet[i]))  _decelSet[i]  = _defDecel;
   _m[i]->setSpeedScale(_speedScale);               // match drive P45 unit
 
   _bus.setResponseTimeout(PROBE_TIMEOUT_MS);
@@ -638,7 +651,7 @@ bool JMCController::initMotorSlot(uint8_t i) {
 
   JMCResult r = JMC_ERR_TIMEOUT;
   if (present) {
-    r = _m[i]->begin(_defAccel, _defDecel);
+    r = _m[i]->begin(_accelSet[i], _decelSet[i]);  // per-motor ramps
     _m[i]->setHomingVelocity(_homingVel[i]);       // hardcoded or default
     _m[i]->setHomingZeroVelocity(_homingVel[i]);
     _m[i]->setHomingOffset(_homingOffset[i]);
@@ -744,6 +757,7 @@ void JMCController::handleUdp() {
   else if (head == "ZS") handleZeroStatus();
   else if (head == "ZO") handleZeroOffset(args);
   else if (head == "MC") handleMotorCount(args);
+  else if (head == "AD") handleAccelDecel(args);
   else if (head == "DG") handleDiagnose(args);
   else if (head == "I")  handleInit();
   else if (head == "P")  handlePosition(args);
@@ -816,7 +830,7 @@ void JMCController::serviceMonitor() {
     c.online = true;
     // Drive (re)appeared - it may have been power-cycled, so re-initialise it
     // fully (enable sequence, accel/decel, homing speeds, stored HO offset).
-    _m[chosen]->begin(_defAccel, _defDecel);
+    _m[chosen]->begin(_accelSet[chosen], _decelSet[chosen]);
     _m[chosen]->setHomingVelocity(_homingVel[chosen]);
     _m[chosen]->setHomingZeroVelocity(_homingVel[chosen]);
     _m[chosen]->setHomingOffset(_homingOffset[chosen]);
@@ -1303,7 +1317,7 @@ void JMCController::handleReset(const String& args) {
   for (uint8_t i = 0; i < _count; i++) {
     if (!sel[i]) continue;
     _m[i]->alarmReset();
-    JMCResult r = _m[i]->begin(_defAccel, _defDecel);
+    JMCResult r = _m[i]->begin(_accelSet[i], _decelSet[i]);
     _cache[i].online = (r == JMC_OK);
     _cache[i].fault  = false;
     if (done.length()) done += ",";
@@ -1365,6 +1379,48 @@ void JMCController::handleMotorCount(const String& args) {
   }
   reply("MC: " + String(_count) + " motors, " + String(online) +
         " online (not saved - set in sketch with setMotorCount)");
+}
+
+// ---- AD : acceleration / deceleration in rps/s --------------------------------
+// For geared mechanisms that need slow ramps. Resolution 0.1 rps/s.
+//   AD:?          read per-motor values
+//   AD:0.2        accel = decel = 0.2 rps/s, ALL motors
+//   AD:0.3,0.1    accel = 0.3, decel = 0.1 rps/s, ALL motors
+// Written to the drives immediately AND remembered for every re-init.
+// Runtime values are lost on controller power failure - hardcode final values
+// with setMotionDefaults() or per motor with setMotorAccelDecel().
+void JMCController::handleAccelDecel(const String& args) {
+  String a = args; a.trim();
+
+  if (!a.length() || a.indexOf('?') >= 0) {
+    String out = "AD: ";
+    for (uint8_t i = 0; i < _count; i++) {
+      if (i) out += ",";
+      out += "M" + String(i + 1) + "=" + String(_accelSet[i], 1) + "/" + String(_decelSet[i], 1);
+    }
+    reply(out + " rps/s (accel/decel)");
+    return;
+  }
+
+  float acc, dec;
+  int comma = a.indexOf(',');
+  if (comma < 0) {
+    acc = dec = a.toFloat();
+  } else {
+    acc = a.substring(0, comma).toFloat();
+    dec = a.substring(comma + 1).toFloat();
+  }
+  if (acc <= 0.0f || dec <= 0.0f || acc > 6553.5f || dec > 6553.5f) {
+    reply("ERR:AD range 0.1..6553.5 rps/s");
+    return;
+  }
+
+  for (uint8_t i = 0; i < _count; i++) {
+    _accelSet[i] = acc;
+    _decelSet[i] = dec;
+    _m[i]->setAccelDecel(acc, dec);   // also refreshes quick-stop ramp 0x6085
+  }
+  reply("AD: all motors accel=" + String(acc, 1) + " decel=" + String(dec, 1) + " rps/s");
 }
 
 // ---- DG : low-level register diagnosis (DG:n) --------------------------------
