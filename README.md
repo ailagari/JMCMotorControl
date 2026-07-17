@@ -216,5 +216,11 @@ never silent.
 **License:** MIT (see LICENSE)
 **Repository:** https://github.com/ailagari/JMCMotorControl
 
-Bench-test before production use: `I` → `L` → small `P:` move → trip a limit
-switch and watch for the `EVENT:LIMIT` packet.
+**Hardware-verified** on a JMC IHSS60-RC drive + Controllino (v1.4.0):
+detection, position moves with closed-loop confirmation, both Modbus write
+types, status/diagnostic reads (`DG`), and fault-free operation confirmed on
+real hardware.
+
+Recommended bring-up checks on any new installation: `I` → `P:` move → the
+speed verification (`V:1` + `VS` → 60 revs in 60 s) → trip a limit switch and
+watch for the `EVENT:LIMIT` packet.
